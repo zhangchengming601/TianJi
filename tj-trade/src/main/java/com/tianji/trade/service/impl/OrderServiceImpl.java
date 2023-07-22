@@ -280,11 +280,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (order == null) {
             return;
         }
-        // 3.判断订单所属用户与当前登录用户是否一致
-        if(userId != order.getUserId()){
-            // 不一致，说明不是当前用户的订单，结束
+
+        if(!userId.equals(order.getUserId())){
             throw new BadRequestException("不能删除他人订单");
         }
+
         // 4.删除订单
         boolean success = removeById(id);
         if (!success) {
