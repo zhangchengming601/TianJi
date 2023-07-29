@@ -42,4 +42,9 @@ public interface ILearningLessonService extends IService<LearningLesson> {
      * */
     LearningLessonVO queryHasLessonById(Long courseId);
 
+    /**
+     * 创建学习计划
+     * */
+    void createLearningPlan(Long courseId, Integer freq);
+
 }

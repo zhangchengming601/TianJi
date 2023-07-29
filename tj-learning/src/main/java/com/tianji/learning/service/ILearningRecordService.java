@@ -1,9 +1,11 @@
 package com.tianji.learning.service;
 
 import com.tianji.api.dto.leanring.LearningLessonDTO;
+import com.tianji.learning.domain.dto.LearningRecordFormDTO;
 import com.tianji.learning.entity.LearningRecord;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * <p>
@@ -18,6 +20,13 @@ public interface ILearningRecordService extends IService<LearningRecord> {
     /**
      * 查询该课程的学习记录
      * */
-    LearningLessonDTO queryLearningRecordByCourse(@PathVariable("courseId") Long courseId);
+    LearningLessonDTO queryLearningRecordByCourse( Long courseId);
+
+
+    /**
+     * 提交学习记录
+     * */
+    void submitLearnRecord(LearningRecordFormDTO learningRecordFormDTO);
+
 
 }
