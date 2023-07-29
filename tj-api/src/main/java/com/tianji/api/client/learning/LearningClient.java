@@ -33,4 +33,11 @@ public interface LearningClient {
     @GetMapping("/learning-records/course/{courseId}")
     LearningLessonDTO queryLearningRecordByCourse(@PathVariable("courseId") Long courseId);
 
+
+    /**
+     * 查询当前用户对于该课程是否有权观看
+     * */
+    @GetMapping("/lessons/{courseId}/valid")
+    Long queryLessonValid(@PathVariable(value = "courseId") Long courseId);
+
 }

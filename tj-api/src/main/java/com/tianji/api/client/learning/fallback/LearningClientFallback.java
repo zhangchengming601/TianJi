@@ -26,6 +26,11 @@ public class LearningClientFallback implements FallbackFactory<LearningClient> {
             public LearningLessonDTO queryLearningRecordByCourse(Long courseId) {
                 return null;
             }
+
+            @Override
+            public Long queryLessonValid(Long courseId) {
+                return null;
+            }
         };
     }
 }
