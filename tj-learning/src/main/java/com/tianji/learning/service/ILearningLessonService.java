@@ -3,6 +3,7 @@ package com.tianji.learning.service;
 import com.tianji.common.domain.dto.PageDTO;
 import com.tianji.common.domain.query.PageQuery;
 import com.tianji.learning.domain.vo.LearningLessonVO;
+import com.tianji.learning.domain.vo.LearningPlanPageVO;
 import com.tianji.learning.entity.LearningLesson;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -46,5 +47,11 @@ public interface ILearningLessonService extends IService<LearningLesson> {
      * 创建学习计划
      * */
     void createLearningPlan(Long courseId, Integer freq);
+
+
+    /**
+     * 查询学习计划进度
+     * */
+    LearningPlanPageVO queryMyPlans(PageQuery query);
 
 }

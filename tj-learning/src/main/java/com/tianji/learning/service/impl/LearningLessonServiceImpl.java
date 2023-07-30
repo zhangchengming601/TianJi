@@ -2,12 +2,15 @@ package com.tianji.learning.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.date.DateTime;
+import cn.hutool.core.date.DateUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.tianji.api.client.course.CatalogueClient;
 import com.tianji.api.client.course.CourseClient;
+import com.tianji.api.dto.IdAndNumDTO;
 import com.tianji.api.dto.course.CataSimpleInfoDTO;
 import com.tianji.api.dto.course.CourseDTO;
 import com.tianji.api.dto.course.CourseFullInfoDTO;
@@ -20,10 +23,14 @@ import com.tianji.common.utils.BeanUtils;
 import com.tianji.common.utils.CollUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.learning.domain.vo.LearningLessonVO;
+import com.tianji.learning.domain.vo.LearningPlanPageVO;
+import com.tianji.learning.domain.vo.LearningPlanVO;
 import com.tianji.learning.entity.LearningLesson;
+import com.tianji.learning.entity.LearningRecord;
 import com.tianji.learning.enums.LessonStatus;
 import com.tianji.learning.enums.PlanStatus;
 import com.tianji.learning.mapper.LearningLessonMapper;
+import com.tianji.learning.mapper.LearningRecordMapper;
 import com.tianji.learning.service.ILearningLessonService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import groovy.util.logging.Slf4j;
@@ -53,6 +60,8 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
     final CatalogueClient catalogueClient;
 
     @Autowired LearningLessonMapper learningLessonMapper;
+    @Autowired
+    LearningRecordMapper learningRecordMapper;
 
 
     /**添加课程信息到用户课程表*/
@@ -227,6 +236,114 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
             l.setPlanStatus(PlanStatus.PLAN_RUNNING);
         }
         updateById(l);
+    }
+
+
+    /**
+     * 查询学习计划进度
+     * */
+    @Override
+    public LearningPlanPageVO queryMyPlans(PageQuery query) {
+        Long userId = UserContext.getUser();
+
+        // 1. 计算本周的开始时间和结束时间
+        DateTime now = DateUtil.date();
+        DateTime beginOfWeek = DateUtil.beginOfWeek(now);
+        DateTime endOfWeek = DateUtil.endOfWeek(now);
+
+        // 2. 在learning_lesson表中查询当前用户的本周的计划学习小节数量--条件是本周当前用户正在学习和未开始的课程
+        Page<LearningLesson> page = this.lambdaQuery()
+                .eq(LearningLesson::getUserId, userId)
+                .eq(LearningLesson::getPlanStatus,PlanStatus.PLAN_RUNNING)
+                .in(LearningLesson::getStatus, LessonStatus.LEARNING, LessonStatus.NOT_BEGIN)
+                .page(query.toMpPage());
+        List<LearningLesson> records = page.getRecords();
+        if (records.isEmpty()){
+            return null;
+        }
+        List<LearningPlanVO> vos = BeanUtil.copyToList(records, LearningPlanVO.class);
+        // 本周计划学习的所有章节数
+        Integer allPlanNum = vos.stream()
+                .filter(learningPlanVO -> learningPlanVO.getWeekFreq() != null)
+                .map(learningPlanVO -> learningPlanVO.getWeekFreq())
+                .reduce(0, (result, element) -> result + element);
+
+        // feign; 远程查询课程信息，返回值是List集合
+        List<Long> courseIds = vos.stream().map(LearningPlanVO::getCourseId).collect(Collectors.toList());
+        if (!CollUtil.isEmpty(courseIds)){
+            List<CourseSimpleInfoDTO> courseList = courseClient.getSimpleInfoList(courseIds);
+            Map<Long, CourseSimpleInfoDTO> coursesMap = courseList.stream()
+                    .collect(Collectors.toMap(courseSimpleInfoDTO -> courseSimpleInfoDTO.getId(), courseSimpleInfoDTO -> courseSimpleInfoDTO));
+            if (!CollUtil.isEmpty(coursesMap)){
+                // 通过查询到的数据对VO进行赋值
+                List<LearningPlanVO> list = vos.stream()
+                        .peek(learningPlanVO -> learningPlanVO.setCourseName(coursesMap.get(learningPlanVO.getCourseId()).getName()))
+                        .peek(learningPlanVO -> learningPlanVO.setSections(coursesMap.get(learningPlanVO.getCourseId()).getSectionNum()))
+                        .collect(Collectors.toList());
+            }
+        }
+
+
+        // 3. 在learning_record表中查询单个lesson本周已经完成的小节数量和总完成的数量
+
+        // 本周的每个lesson_id的已完成的小节数量
+        List<IdAndNumDTO> weekNum = learningRecordMapper.countLearnedSections(userId,
+                beginOfWeek.toLocalDateTime(),
+                endOfWeek.toLocalDateTime());
+        Map<Long, Integer> weekNumMap = IdAndNumDTO.toMap(weekNum);
+        // 本周完成的小节总数
+        Integer weekFinNum = weekNum.stream().
+                map(idAndNumDTO -> idAndNumDTO.getNum())
+                .reduce(0, (result, element) -> result + element);
+
+        // 每个lesson_id已完成小节数量 (不是本周)
+        List<IdAndNumDTO> allNum = learningRecordMapper.countAllLearnedSections(userId);
+        Map<Long, Integer> allNumMap = IdAndNumDTO.toMap(allNum);
+        // 总共完成的小节数量(不是本周)
+        Integer AllFinNum = allNum.stream().
+                map(idAndNumDTO -> idAndNumDTO.getNum())
+                .reduce(0, (result, element) -> result + element);
+
+        if(CollUtil.isNotEmpty(weekNumMap)){
+            vos.stream()
+                    .peek(learningPlanVO ->
+                            learningPlanVO.setWeekLearnedSections(weekNumMap.get(learningPlanVO.getId())!=null?weekNumMap.get(learningPlanVO.getId()):0))
+                    .collect(Collectors.toList());
+        }
+        if(CollUtil.isNotEmpty(allNumMap)){
+            vos.stream()
+                    .peek(learningPlanVO ->
+                            learningPlanVO.setLearnedSections(allNumMap.get(learningPlanVO.getId())!=null?allNumMap.get(learningPlanVO.getId()):0))
+                    .collect(Collectors.toList());
+        }
+
+//        Integer weekFinNum = 0;
+//        for(LearningPlanVO learningPlanVO : vos){
+//            // 对每一个lessonId，去learning_record中查找所有已经完成的小节集合
+//            Long lessonId = learningPlanVO.getId();
+//            LambdaQueryWrapper<LearningRecord> wrapper = new LambdaQueryWrapper<LearningRecord>()
+//                    .eq(LearningRecord::getLessonId, lessonId)
+//                    .eq(LearningRecord::getFinished,true);
+//            List<LearningRecord> learningRecords = learningRecordMapper.selectList(wrapper);
+//
+//            // 将查询结果分为本周已完成的小节数量和总共已完成的小节数量
+//            int allFinishedSize = learningRecords.size();
+//            long thisWeekFinishedSize = learningRecords.stream()
+//                    .filter(learningRecord -> learningRecord.getFinishTime().isAfter(beginOfWeek.toLocalDateTime()) && learningRecord.getFinishTime().isBefore(endOfWeek.toLocalDateTime()))
+//                    .count();
+//            weekFinNum+=(int)thisWeekFinishedSize;
+//
+//            learningPlanVO.setWeekLearnedSections((int) thisWeekFinishedSize);
+//            learningPlanVO.setLearnedSections(allFinishedSize);
+//        }
+
+        //TODO: 积分查询
+
+        LearningPlanPageVO learningPlanPageVO = new LearningPlanPageVO();
+        learningPlanPageVO.setWeekTotalPlan(allPlanNum);
+        learningPlanPageVO.setWeekFinished(weekFinNum);
+
+        return learningPlanPageVO.pageInfo(page.getTotal(),page.getPages(),vos);
     }
 
     private LearningLesson queryByUserAndCourseId(Long userId, Long coueseId){
