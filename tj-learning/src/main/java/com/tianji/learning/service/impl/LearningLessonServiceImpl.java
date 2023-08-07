@@ -337,7 +337,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
 //            learningPlanVO.setLearnedSections(allFinishedSize);
 //        }
 
-        //TODO: 积分查询
+        // TODO: 积分查询
 
         LearningPlanPageVO learningPlanPageVO = new LearningPlanPageVO();
         learningPlanPageVO.setWeekTotalPlan(allPlanNum);
