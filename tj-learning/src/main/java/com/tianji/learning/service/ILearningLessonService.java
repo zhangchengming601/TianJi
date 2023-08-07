@@ -54,4 +54,6 @@ public interface ILearningLessonService extends IService<LearningLesson> {
      * */
     LearningPlanPageVO queryMyPlans(PageQuery query);
 
+    LearningLesson queryByUserAndCourseId(Long userId,Long courseId);
+
 }

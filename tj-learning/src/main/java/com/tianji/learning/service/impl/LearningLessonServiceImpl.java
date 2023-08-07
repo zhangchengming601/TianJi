@@ -346,7 +346,7 @@ public class LearningLessonServiceImpl extends ServiceImpl<LearningLessonMapper,
         return learningPlanPageVO.pageInfo(page.getTotal(),page.getPages(),vos);
     }
 
-    private LearningLesson queryByUserAndCourseId(Long userId, Long coueseId){
+    public LearningLesson queryByUserAndCourseId(Long userId, Long coueseId){
         return this.lambdaQuery()
                 .eq(LearningLesson::getUserId,userId)
                 .eq(LearningLesson::getCourseId,coueseId)

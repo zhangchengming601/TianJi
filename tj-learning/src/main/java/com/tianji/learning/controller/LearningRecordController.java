@@ -38,7 +38,7 @@ public class LearningRecordController {
     @ApiOperation("提交学习记录")
     @PostMapping
     public void submitLearnRecord(@RequestBody @Validated LearningRecordFormDTO learningRecordFormDTO){
-        learningRecordService.submitLearnRecord(learningRecordFormDTO);
+        learningRecordService.addLearningRecord(learningRecordFormDTO);
     }
 
 }

@@ -26,7 +26,7 @@ public interface ILearningRecordService extends IService<LearningRecord> {
     /**
      * 提交学习记录
      * */
-    void submitLearnRecord(LearningRecordFormDTO learningRecordFormDTO);
+     void addLearningRecord(LearningRecordFormDTO recordDTO);
 
 
 }
