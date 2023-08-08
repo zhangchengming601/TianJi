@@ -40,7 +40,7 @@ public class InteractionQuestionAdminController {
 
     @ApiOperation("分页查询问题列表-管理端")
     @GetMapping("/page")
-    public PageDTO<QuestionAdminVO> queryQuestionAdminVOPage(@RequestBody QuestionAdminPageQuery query){
+    public PageDTO<QuestionAdminVO> queryQuestionAdminVOPage( QuestionAdminPageQuery query){
         return questionService.queryQuestionAdminVOPage(query);
     }
 }

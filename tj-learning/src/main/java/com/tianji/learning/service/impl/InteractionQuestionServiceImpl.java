@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.tianji.api.cache.CategoryCache;
 import com.tianji.api.client.course.CatalogueClient;
 import com.tianji.api.client.course.CourseClient;
 import com.tianji.api.client.search.SearchClient;
@@ -25,6 +26,7 @@ import com.tianji.learning.domain.vo.QuestionVO;
 import com.tianji.learning.entity.InteractionQuestion;
 import com.tianji.learning.entity.InteractionReply;
 import com.tianji.learning.mapper.InteractionQuestionMapper;
+import com.tianji.learning.mapper.InteractionReplyMapper;
 import com.tianji.learning.service.IInteractionQuestionService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tianji.learning.service.IInteractionReplyService;
@@ -55,13 +57,15 @@ public class InteractionQuestionServiceImpl extends ServiceImpl<InteractionQuest
 
     private final UserClient userClient;
 
-    private final IInteractionReplyService replyService;
+    private final InteractionReplyMapper replyMapper;
 
     private final SearchClient searchClient;
 
     private final CatalogueClient catalogueClient;
 
     private final CourseClient courseClient;
+
+    private final CategoryCache categoryCache;
 
 
     /**
@@ -152,7 +156,7 @@ public class InteractionQuestionServiceImpl extends ServiceImpl<InteractionQuest
         Map<Long, UserDTO> answUsersMap = null;
         Map<Long, InteractionReply> repliesMap = null;
         if (CollUtil.isNotEmpty(answIds)){
-            List<InteractionReply> replies = replyService.getBaseMapper().selectBatchIds(answIds);
+            List<InteractionReply> replies = replyMapper.selectBatchIds(answIds);
             repliesMap = replies.stream()
                     .collect(Collectors.toMap(reply -> reply.getId(), reply -> reply));
             List<Long> answUserId = replies.stream()
@@ -286,9 +290,28 @@ public class InteractionQuestionServiceImpl extends ServiceImpl<InteractionQuest
                     .collect(Collectors.toMap(CataSimpleInfoDTO::getId, CataSimpleInfoDTO::getName));
         }
 
+        // 4.封装VO
+        List<QuestionAdminVO> voList = new ArrayList<>(records.size());
+        for (InteractionQuestion q : records) {
+            // 4.1.将PO转VO，属性拷贝
+            QuestionAdminVO vo = BeanUtils.copyBean(q, QuestionAdminVO.class);
+            voList.add(vo);
+            // 4.2.用户信息
+            UserDTO user = userMap.get(q.getUserId());
+            if (user != null) {
+                vo.setUserName(user.getName());
+            }
+            // 4.3.课程信息以及分类信息
+            CourseSimpleInfoDTO cInfo = cInfoMap.get(q.getCourseId());
+            if (cInfo != null) {
+                vo.setCourseName(cInfo.getName());
+                vo.setCategoryName(categoryCache.getCategoryNames(cInfo.getCategoryIds()));
+            }
+            // 4.4.章节信息
+            vo.setChapterName(cataMap.getOrDefault(q.getChapterId(), ""));
+            vo.setSectionName(cataMap.getOrDefault(q.getSectionId(), ""));
+        }
+        return PageDTO.of(page, voList);
 
-
-
-        return null;
     }
 }

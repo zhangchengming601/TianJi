@@ -1,7 +1,12 @@
 package com.tianji.learning.service;
 
+import com.tianji.common.domain.dto.PageDTO;
+import com.tianji.learning.domain.dto.ReplyDTO;
+import com.tianji.learning.domain.query.ReplyPageQuery;
+import com.tianji.learning.domain.vo.ReplyVO;
 import com.tianji.learning.entity.InteractionReply;
 import com.baomidou.mybatisplus.extension.service.IService;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * <p>
@@ -13,4 +18,14 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IInteractionReplyService extends IService<InteractionReply> {
 
+    /**
+     * 新增回答或者评论
+     * */
+    void saveReply(ReplyDTO replyDTO);
+
+
+    /**
+     * 分页查询回答或者评论列表
+     * */
+    PageDTO<ReplyVO> queryReplyPage(ReplyPageQuery query);
 }
