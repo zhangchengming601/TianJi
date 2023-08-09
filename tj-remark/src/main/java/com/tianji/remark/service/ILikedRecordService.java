@@ -28,4 +28,11 @@ public interface ILikedRecordService extends IService<LikedRecord> {
      * 查询当前用户是否点赞了指定的业务
      * */
     Set<Long> isBizLiked(List<Long> bizIds);
+
+
+
+    /**
+     * 获得某业务的总点赞数，并向ma中发送该消息
+     * */
+    void readLikedTimesAndSendMessage(String bizType, int maxBizSize);
 }

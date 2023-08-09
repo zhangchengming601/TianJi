@@ -11,6 +11,7 @@ import com.tianji.remark.mapper.LikedRecordMapper;
 import com.tianji.remark.service.ILikedRecordService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -30,6 +31,7 @@ import static com.tianji.common.constants.MqConstants.Key.LIKED_TIMES_KEY_TEMPLA
  */
 //@Service
 @RequiredArgsConstructor
+@Slf4j
 public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, LikedRecord> implements ILikedRecordService {
 
 
@@ -40,6 +42,8 @@ public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, Liked
      * */
     @Override
     public void addLikeRecord(LikeRecordFormDTO dto) {
+
+
         // 1. 获取当前登录用户
         Long userId = UserContext.getUser();
 
@@ -110,6 +114,11 @@ public class LikedRecordServiceImpl extends ServiceImpl<LikedRecordMapper, Liked
                 .list();
         // 3.返回结果
         return list.stream().map(LikedRecord::getBizId).collect(Collectors.toSet());
+    }
+
+    @Override
+    public void readLikedTimesAndSendMessage(String bizType, int maxBizSize) {
+
     }
 
 }
