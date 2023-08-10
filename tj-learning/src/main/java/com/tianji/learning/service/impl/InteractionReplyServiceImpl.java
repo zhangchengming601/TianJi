@@ -1,12 +1,15 @@
 package com.tianji.learning.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.collection.CollUtil;
+import com.baomidou.mybatisplus.core.metadata.OrderItem;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.tianji.api.client.remark.RemarkClient;
 import com.tianji.api.client.user.UserClient;
 import com.tianji.api.dto.user.UserDTO;
 import com.tianji.common.domain.dto.PageDTO;
+import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.utils.BeanUtils;
+import com.tianji.common.utils.CollUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.learning.domain.dto.ReplyDTO;
 import com.tianji.learning.domain.query.ReplyPageQuery;
@@ -17,15 +20,20 @@ import com.tianji.learning.enums.QuestionStatus;
 import com.tianji.learning.mapper.InteractionReplyMapper;
 import com.tianji.learning.service.IInteractionQuestionService;
 import com.tianji.learning.service.IInteractionReplyService;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static com.tianji.common.constants.Constant.DATA_FIELD_NAME_CREATE_TIME;
+import static com.tianji.common.constants.Constant.DATA_FIELD_NAME_LIKED_TIME;
 
 /**
  * <p>
@@ -42,6 +50,8 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
 
     private final IInteractionQuestionService questionService;
     private final UserClient userClient;
+    private final RemarkClient remarkClient;
+
 
 
     /**
@@ -80,50 +90,85 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
      * 分页查询回答或者评论列表
      * */
     @Override
-    public PageDTO<ReplyVO> queryReplyPage(ReplyPageQuery query) {
-
-        // 1. 先根据条件查询reply表中的数据，questionId和answerId(至少一个不为空)
-        Page<InteractionReply> page = this.lambdaQuery()
-                .eq(query.getQuestionId() != null, InteractionReply::getQuestionId, query.getQuestionId())
-                .eq(query.getQuestionId() != null, InteractionReply::getAnswerId, 0l)
-                .eq(query.getAnswerId() != null, InteractionReply::getAnswerId, query.getAnswerId())
-                .eq(InteractionReply::getHidden,false)
-                .page(query.toMpPage("create_time", false));
-
+    public PageDTO<ReplyVO> queryReplyPage(ReplyPageQuery query, boolean forAdmin) {
+        // 1.问题id和回答id至少要有一个，先做参数判断
+        Long questionId = query.getQuestionId();
+        Long answerId = query.getAnswerId();
+        if (questionId == null && answerId == null) {
+            throw new BadRequestException("问题或回答id不能都为空");
+        }
+        // 标记当前是查询问题下的回答
+        boolean isQueryAnswer = questionId != null;
+        // 2.分页查询reply
+        Page<InteractionReply> page = lambdaQuery()
+                .eq(isQueryAnswer, InteractionReply::getQuestionId, questionId)
+                .eq(InteractionReply::getAnswerId, isQueryAnswer ? 0L : answerId)
+                .eq(!forAdmin, InteractionReply::getHidden, false)
+                .page(query.toMpPage( // 先根据点赞数排序，点赞数相同，再按照创建时间排序
+                        new OrderItem(DATA_FIELD_NAME_LIKED_TIME, false),
+                        new OrderItem(DATA_FIELD_NAME_CREATE_TIME, true))
+                );
         List<InteractionReply> records = page.getRecords();
-        if (CollUtil.isEmpty(records)){
+        if (CollUtils.isEmpty(records)) {
             return PageDTO.empty(page);
         }
-
-        // 2. 查询reply中单条数据的回复者信息 （条件：非匿名）
-        List<Long> ids = records.stream()
-                .filter(interactionReply -> interactionReply.getAnonymity() == false)
-                .map(interactionReply -> interactionReply.getUserId())
-                .collect(Collectors.toList());
-        // 2.1 通过fegin调用远程服务，查询User信息
-        List<UserDTO> userDTOS = userClient.queryUserByIds(ids);
-        // 2.2 将userDTOS转为Map数据结构
-        Map<Long, UserDTO> userDTOMap = userDTOS.stream()
-                .filter(userDTO -> userDTO != null)
-                .collect(Collectors.toMap(userDTO -> userDTO.getId(), Function.identity()));
-
-        // 3. 封装数据
-        ArrayList<ReplyVO> replyVOS = new ArrayList<>();
-        for (InteractionReply reply : records){
-            // 3.1 po转vo
-            ReplyVO vo = BeanUtil.copyProperties(reply, ReplyVO.class);
-
-            // 3.2 封装reply的用户信息
-            UserDTO userDTO = userDTOMap.get(reply.getUserId());
-            if (userDTO != null){
-                vo.setUserName(userDTO.getName());
-                vo.setUserIcon(userDTO.getIcon());
-                vo.setUserType(userDTO.getType());
+        // 3.数据处理，需要查询：提问者信息、回复目标信息、当前用户是否点赞
+        Set<Long> userIds = new HashSet<>();
+        Set<Long> answerIds = new HashSet<>();
+        Set<Long> targetReplyIds = new HashSet<>();
+        // 3.1.获取提问者id 、回复的目标id、当前回答或评论id（统计点赞信息）
+        for (InteractionReply r : records) {
+            if(!r.getAnonymity() || forAdmin) {
+                // 非匿名
+                userIds.add(r.getUserId());
             }
-            replyVOS.add(vo);
+            targetReplyIds.add(r.getTargetReplyId());
+            answerIds.add(r.getId());
         }
-
-
-        return new PageDTO<>(page.getTotal(),page.getPages(),replyVOS);
+        // 3.2.查询目标回复，如果目标回复不是匿名，则需要查询出目标回复的用户信息
+        targetReplyIds.remove(0L);
+        targetReplyIds.remove(null);
+        if(targetReplyIds.size() > 0) {
+            List<InteractionReply> targetReplies = listByIds(targetReplyIds);
+            Set<Long> targetUserIds = targetReplies.stream()
+                    .filter(Predicate.not(InteractionReply::getAnonymity).or(r -> forAdmin))
+                    .map(InteractionReply::getUserId)
+                    .collect(Collectors.toSet());
+            userIds.addAll(targetUserIds);
+        }
+        // 3.3.查询用户
+        Map<Long, UserDTO> userMap = new HashMap<>(userIds.size());
+        if(userIds.size() > 0) {
+            List<UserDTO> users = userClient.queryUserByIds(userIds);
+            userMap = users.stream().collect(Collectors.toMap(UserDTO::getId, u -> u));
+        }
+        // 3.4.查询用户点赞状态
+        Set<Long> bizLiked = remarkClient.isBizLiked(answerIds);
+        // 4.处理VO
+        List<ReplyVO> list = new ArrayList<>(records.size());
+        for (InteractionReply r : records) {
+            // 4.1.拷贝基础属性
+            ReplyVO v = BeanUtils.toBean(r, ReplyVO.class);
+            list.add(v);
+            // 4.2.回复人信息
+            if(!r.getAnonymity() || forAdmin){
+                UserDTO userDTO = userMap.get(r.getUserId());
+                if (userDTO != null) {
+                    v.setUserIcon(userDTO.getIcon());
+                    v.setUserName(userDTO.getName());
+                    v.setUserType(userDTO.getType());
+                }
+            }
+            // 4.3.如果存在评论的目标，则需要设置目标用户信息
+            if(r.getTargetReplyId() != null){
+                UserDTO targetUser = userMap.get(r.getTargetUserId());
+                if (targetUser != null) {
+                    v.setTargetUserName(targetUser.getName());
+                }
+            }
+            // 4.4.点赞状态
+            v.setLiked(bizLiked.contains(r.getId()));
+        }
+        return new PageDTO<>(page.getTotal(), page.getPages(), list);
     }
 }
