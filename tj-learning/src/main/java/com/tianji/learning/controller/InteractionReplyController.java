@@ -40,7 +40,7 @@ public class InteractionReplyController {
     @ApiOperation("分页查询回答或者评论列表")
     @GetMapping("/page")
     public PageDTO<ReplyVO> queryReplyPage(ReplyPageQuery query){
-        return replyService.queryReplyPage(query);
+        return replyService.queryReplyPage(query,false);
     }
 
 
