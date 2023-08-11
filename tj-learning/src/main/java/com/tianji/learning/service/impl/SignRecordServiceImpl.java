@@ -6,6 +6,7 @@ import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.constants.MqConstants;
 import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.utils.CollUtils;
+import com.tianji.common.utils.DateUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.learning.domain.vo.SignResultVO;
 import com.tianji.learning.mq.message.SignInMessage;
@@ -15,6 +16,7 @@ import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static com.tianji.learning.contants.RedisContants.SIGN_RECORD_KEY_PREFIX;
@@ -75,6 +77,36 @@ public class SignRecordServiceImpl implements ISignRecordService {
         vo.setRewardPoints(rewardPoints);
         return vo;
 
+    }
+
+    @Override
+    public Byte[] querySignRecords() {
+        // 1.获取登录用户
+        Long userId = UserContext.getUser();
+        // 2.获取日期
+        LocalDate now = LocalDate.now();
+        int dayOfMonth = now.getDayOfMonth();
+        // 3.拼接key
+        String key = SIGN_RECORD_KEY_PREFIX
+                + userId
+                + now.format(DateUtils.SIGN_DATE_SUFFIX_FORMATTER);
+        // 4.读取
+        List<Long> result = redisTemplate.opsForValue()
+                .bitField(key, BitFieldSubCommands.create().get(
+                        BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0));
+        if (CollUtils.isEmpty(result)) {
+            return new Byte[0];
+        }
+        int num = result.get(0).intValue();
+
+        Byte[] arr = new Byte[dayOfMonth];
+        int pos = dayOfMonth - 1;
+        while (pos >= 0){
+            arr[pos--] = (byte)(num & 1);
+            // 把数字右移一位，抛弃最后一个bit位，继续下一个bit位
+            num >>>= 1;
+        }
+        return arr;
     }
 
     private int countSignDays(String key, int day) {

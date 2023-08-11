@@ -5,6 +5,7 @@ import com.tianji.learning.domain.vo.SignResultVO;
 import com.tianji.learning.service.ISignRecordService;
 import io.swagger.annotations.ApiOperation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 签到Controller
  * */
 @RestController
-@RequestMapping("/sign-record")
+@RequestMapping("/sign-records")
 @RequiredArgsConstructor
 public class SignRecordController {
 
@@ -25,5 +26,13 @@ public class SignRecordController {
     public SignResultVO addSignRecords(){
         return recordService.addSignRecords();
     }
+
+    @GetMapping
+    @ApiOperation("查询签到记录")
+    public Byte[] querySignRecords(){
+        return recordService.querySignRecords();
+    }
+
+
 
 }

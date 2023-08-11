@@ -27,4 +27,14 @@ public class DateUtilTest {
         System.out.println("------------");
         System.out.println(LocalDate.now());
     }
+
+
+    @Test
+    public void test2(){
+        DateTime date = DateUtil.date();
+        DateTime begin = DateUtil.beginOfDay(date);
+        DateTime end = DateUtil.endOfDay(date);
+        System.out.println("begin="+begin);
+        System.out.println("end="+end);
+    }
 }
