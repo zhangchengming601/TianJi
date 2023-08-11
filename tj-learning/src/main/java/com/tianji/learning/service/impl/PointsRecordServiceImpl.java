@@ -13,11 +13,15 @@ import com.tianji.learning.domain.vo.PointsStatisticsVO;
 import com.tianji.learning.enums.PointsRecordType;
 import com.tianji.learning.mapper.PointsRecordMapper;
 import com.tianji.learning.service.IPointsRecordService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.tianji.learning.contants.RedisContants.POINTS_BOARD_KEY_PREFIX;
 
 /**
  * <p>
@@ -28,8 +32,16 @@ import java.util.List;
  * @since 2023-08-10
  */
 @Service
+@RequiredArgsConstructor
 public class PointsRecordServiceImpl extends ServiceImpl<PointsRecordMapper, PointsRecord> implements IPointsRecordService {
 
+
+    private final StringRedisTemplate redisTemplate;
+
+
+    /**
+     * 1. 添加积分到数据库中，支持多种积分奖励项目（课程学习，每日签到。。。）
+     * */
     @Override
     public void addPointsRecord(Long userId, int points, PointsRecordType type) {
         // 1. 判断该type每日积分是否有上限
@@ -48,6 +60,10 @@ public class PointsRecordServiceImpl extends ServiceImpl<PointsRecordMapper, Poi
         }
         // 3. 如果没有上限，则直接保存到数据库
         savePointRecordToDB(userId,type,points);
+
+        // 4. 将该用户新增加的积分添加到redis中
+        String key = POINTS_BOARD_KEY_PREFIX + DateUtil.format(DateUtil.date(),"yyyyMM");
+        redisTemplate.opsForZSet().incrementScore(key,userId.toString(),points);
     }
 
     @Override

@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @SpringBootTest
 public class DateUtilTest {
@@ -36,5 +38,22 @@ public class DateUtilTest {
         DateTime end = DateUtil.endOfDay(date);
         System.out.println("begin="+begin);
         System.out.println("end="+end);
+    }
+
+
+    @Test
+    public void test3(){
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMM");
+        String s = dtf.format(now);
+        System.out.println(s);
+
+
+
+        DateTime date = DateUtil.date();
+        String s1 = DateUtil.format(date, "yyyyMM");
+        System.out.println(s1);
+
+
     }
 }
