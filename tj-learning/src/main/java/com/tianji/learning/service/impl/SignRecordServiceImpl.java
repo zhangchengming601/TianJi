@@ -6,7 +6,6 @@ import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.constants.MqConstants;
 import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.utils.CollUtils;
-import com.tianji.common.utils.DateUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.learning.domain.vo.SignResultVO;
 import com.tianji.learning.mq.message.SignInMessage;
@@ -42,7 +41,7 @@ public class SignRecordServiceImpl implements ISignRecordService {
         int month = DateUtil.month(date);
         int day = DateUtil.dayOfMonth(date);
         String time = String.valueOf(year) + String.valueOf(month);
-        String key = SIGN_RECORD_KEY_PREFIX + userId.toString() + time;
+        String key = SIGN_RECORD_KEY_PREFIX + userId.toString()+ ":" + time;
 
         Boolean bit = redisTemplate.opsForValue().setBit(key, day - 1, true);
         if (bit) {
@@ -87,9 +86,11 @@ public class SignRecordServiceImpl implements ISignRecordService {
         LocalDate now = LocalDate.now();
         int dayOfMonth = now.getDayOfMonth();
         // 3.拼接key
-        String key = SIGN_RECORD_KEY_PREFIX
-                + userId
-                + now.format(DateUtils.SIGN_DATE_SUFFIX_FORMATTER);
+        DateTime date = DateUtil.date();
+        int year = DateUtil.year(date);
+        int month = DateUtil.month(date);
+        String time = String.valueOf(year) + String.valueOf(month);
+        String key = SIGN_RECORD_KEY_PREFIX + userId.toString()+ ":" + time;
         // 4.读取
         List<Long> result = redisTemplate.opsForValue()
                 .bitField(key, BitFieldSubCommands.create().get(

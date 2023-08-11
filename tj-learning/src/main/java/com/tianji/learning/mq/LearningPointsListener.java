@@ -47,6 +47,7 @@ public class LearningPointsListener {
     ))
     public void listenSignInMessage(SignInMessage message){
         log.info("消费到消息{}",message.toString());
+        recordService.addPointsRecord(message.getUserId(),message.getPoints(), PointsRecordType.SIGN);
     }
 
 
