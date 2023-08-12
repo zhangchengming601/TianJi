@@ -1,12 +1,12 @@
 server:
-  port: 8090  #端口
+  port: 8099  #端口
   tomcat:
     uri-encoding: UTF-8   #服务编码
 spring:
   profiles:
     active: dev
   application:
-    name: learning-service
+    name: xxljobdemo-service
   cloud:
     nacos:
       config:
@@ -24,13 +24,13 @@ spring:
             refresh: false
           - data-id: shared-mq.yaml # 共享mq配置
             refresh: false
-          - data-id: shared-xxljob.yaml # 共享xxljob配置
+          - data-id: shared-xxljob.yaml # 共享xxxjob配置
             refresh: false
 tj:
   swagger:
     enable: true
     enableResponseWrap: true
-    package-path: com.tianji.learning.controller
+    package-path: com.tianji.xxljob.Controller
     title: 天机学堂 - 学习中心接口文档
     description: 该服务包含用户学习的各种辅助功能
     contact-name: 传智教育·研究院

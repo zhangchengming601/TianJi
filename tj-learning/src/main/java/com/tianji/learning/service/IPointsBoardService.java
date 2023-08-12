@@ -1,7 +1,9 @@
 package com.tianji.learning.service;
 
-import com.tianji.learning.domain.po.PointsBoard;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.tianji.learning.domain.po.PointsBoard;
+import com.tianji.learning.domain.query.PointsBoardQuery;
+import com.tianji.learning.domain.vo.PointsBoardVO;
 
 /**
  * <p>
@@ -12,5 +14,13 @@ import com.baomidou.mybatisplus.extension.service.IService;
  * @since 2023-08-10
  */
 public interface IPointsBoardService extends IService<PointsBoard> {
+
+    PointsBoardVO queryPointsBoardBySeason(PointsBoardQuery query);
+
+
+    /**
+     * 创建赛季积分表
+     * */
+    void createPointsBoardTableBySeason(Integer season);
 
 }

@@ -29,7 +29,7 @@ public class PointsBoard implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @ApiModelProperty(value = "榜单id")
-    @TableId(value = "id", type = IdType.ASSIGN_ID)
+    @TableId(value = "id", type = IdType.INPUT)
     private Long id;
 
     @ApiModelProperty(value = "学生id")
@@ -37,12 +37,5 @@ public class PointsBoard implements Serializable {
 
     @ApiModelProperty(value = "积分值")
     private Integer points;
-
-    @ApiModelProperty(value = "名次，只记录赛季前100")
-    private Integer rank;
-
-    @ApiModelProperty(value = "赛季，例如 1,就是第一赛季，2-就是第二赛季")
-    private Integer season;
-
 
 }

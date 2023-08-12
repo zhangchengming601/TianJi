@@ -1,7 +1,8 @@
 package com.tianji.learning.mapper;
 
-import com.tianji.learning.domain.po.PointsBoard;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.tianji.learning.domain.po.PointsBoard;
+import org.apache.ibatis.annotations.Param;
 
 /**
  * <p>
@@ -12,5 +13,10 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  * @since 2023-08-10
  */
 public interface PointsBoardMapper extends BaseMapper<PointsBoard> {
+
+    /**
+     * 创建赛季积分表
+     * */
+    void createPointsBoardTable(@Param("tableName") String tableName);
 
 }
