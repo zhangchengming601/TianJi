@@ -4,7 +4,9 @@ package com.tianji.common.autoconfigure.mybatis;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.DynamicTableNameInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -26,12 +28,19 @@ public class MybatisConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    public MybatisPlusInterceptor mybatisPlusInterceptor() {
+    public MybatisPlusInterceptor mybatisPlusInterceptor(@Autowired(required = false)DynamicTableNameInnerInterceptor innerInterceptor) {
+
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+
+        // 动态表明拦截器
+        if (innerInterceptor != null){
+            interceptor.addInnerInterceptor(innerInterceptor);
+        }
+
         PaginationInnerInterceptor paginationInnerInterceptor = new PaginationInnerInterceptor(DbType.MYSQL);
         paginationInnerInterceptor.setMaxLimit(200L);
-        interceptor.addInnerInterceptor(paginationInnerInterceptor);
-        interceptor.addInnerInterceptor(new MyBatisAutoFillInterceptor());
+        interceptor.addInnerInterceptor(paginationInnerInterceptor);   // 分页拦截器插件
+        interceptor.addInnerInterceptor(new MyBatisAutoFillInterceptor());   // 自动填充拦截器插件
         return interceptor;
     }
 }
