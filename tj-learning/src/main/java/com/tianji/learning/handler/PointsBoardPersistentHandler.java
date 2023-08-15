@@ -7,12 +7,14 @@ import com.tianji.learning.domain.po.PointsBoard;
 import com.tianji.learning.service.IPointsBoardSeasonService;
 import com.tianji.learning.service.IPointsBoardService;
 import com.tianji.learning.utils.TableInfoContext;
+import com.xxl.job.core.context.XxlJobHelper;
 import com.xxl.job.core.handler.annotation.XxlJob;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -46,9 +48,11 @@ public class PointsBoardPersistentHandler {
         // 1. 从redis中获得数据（上个月的积分排行榜）
         String key = POINTS_BOARD_KEY_PREFIX + DateTimeFormatter.ofPattern("yyyyMM").format(time);
 
-        // 1.1 按照score分数，从大到小查出来
-        int pageNo = 1;
+        int shardIndex = XxlJobHelper.getShardIndex();  // 分片序号
+        int shardTotal = XxlJobHelper.getShardTotal();  // 分片总数
+        int pageNo = shardIndex+1;
         int pageSize = 1000;
+        // 1.1 按照score分数，从大到小查出来
         while (true){
             List<PointsBoard> pointsBoards = pointsBoardService.queryCurrentBoardList(key, pageNo, pageSize);
             if (CollUtil.isEmpty(pointsBoards)){
@@ -59,8 +63,9 @@ public class PointsBoardPersistentHandler {
             if (!success){
                 throw new DbException("持久化redis中积分榜单数据错误");
             }
-            // 更新分页数据
-            pageNo++;
+
+            // 5.翻页，跳过N个页，N就是分片数量
+            pageNo +=shardTotal;
         }
 
         // 任务结束，移除动态表名
@@ -82,4 +87,20 @@ public class PointsBoardPersistentHandler {
         // 2. 创建表
         pointsBoardService.createPointsBoardTableBySeason(seasonId);
     }
+
+
+
+    /**
+     * 清除redis中上个赛季的积分榜单数据
+     * */
+    @XxlJob("clearPointsBoardFromRedis")
+    public void clearPointsBoardFromRedis(){
+        // 1.获取上月时间
+        LocalDateTime time = LocalDateTime.now().minusMonths(1);
+        // 2.计算key
+        String key = POINTS_BOARD_KEY_PREFIX + DateTimeFormatter.ofPattern("yyyyMM").format(time);
+        // 3.删除
+        redisTemplate.unlink(key);
+    }
+
 }
