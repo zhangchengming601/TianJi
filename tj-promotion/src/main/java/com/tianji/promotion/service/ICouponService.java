@@ -3,6 +3,7 @@ package com.tianji.promotion.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.tianji.common.domain.dto.PageDTO;
 import com.tianji.promotion.domain.dto.CouponFormDTO;
+import com.tianji.promotion.domain.dto.CouponIssueFormDTO;
 import com.tianji.promotion.domain.po.Coupon;
 import com.tianji.promotion.domain.query.CouponQuery;
 import com.tianji.promotion.domain.vo.CouponPageVO;
@@ -26,4 +27,10 @@ public interface ICouponService extends IService<Coupon> {
      * 分页查询优惠券接口
      * */
     PageDTO<CouponPageVO> queryCouponByPage(CouponQuery query);
+
+
+    /**
+     * 发放优惠券接口
+     * */
+    void beginIssue(CouponIssueFormDTO dto);
 }

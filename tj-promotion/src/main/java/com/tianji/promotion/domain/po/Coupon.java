@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.tianji.promotion.enums.CouponStatus;
 import com.tianji.promotion.enums.DiscountType;
 import com.tianji.promotion.enums.ObtainType;
 import io.swagger.annotations.ApiModel;
@@ -78,7 +79,7 @@ public class Coupon implements Serializable {
     private LocalDateTime termEndTime;
 
     @ApiModelProperty(value = "优惠券配置状态，1：待发放，2：未开始   3：进行中，4：已结束，5：暂停")
-    private CouponScope status;
+    private CouponStatus status;
 
     @ApiModelProperty(value = "总数量，不超过5000")
     private Integer totalNum;
