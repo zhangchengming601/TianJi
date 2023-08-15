@@ -7,12 +7,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tianji.api.client.user.UserClient;
 import com.tianji.api.dto.user.UserDTO;
+import com.tianji.common.utils.CollUtils;
 import com.tianji.common.utils.UserContext;
 import com.tianji.learning.domain.po.PointsBoard;
 import com.tianji.learning.domain.query.PointsBoardQuery;
 import com.tianji.learning.domain.vo.PointsBoardItemVO;
 import com.tianji.learning.domain.vo.PointsBoardVO;
 import com.tianji.learning.mapper.PointsBoardMapper;
+import com.tianji.learning.service.IPointsBoardSeasonService;
 import com.tianji.learning.service.IPointsBoardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +44,7 @@ public class PointsBoardServiceImpl extends ServiceImpl<PointsBoardMapper, Point
 
     private final StringRedisTemplate redisTemplate;
     private final UserClient userClient;
+    private final IPointsBoardSeasonService pointsBoardSeasonService;
 
     /**
      * 分页查询指定赛季的积分排行榜
@@ -109,6 +112,51 @@ public class PointsBoardServiceImpl extends ServiceImpl<PointsBoardMapper, Point
     public void createPointsBoardTableBySeason(Integer season) {
         this.getBaseMapper().createPointsBoardTable(POINTS_BOARD_TABLE_PREFIX+season );
 
+    }
+
+    /**
+     * 保存上赛季榜单数据到数据库中
+     * */
+    @Override
+    public Boolean savePointsBoardList(List<PointsBoard> pointsBoards) {
+
+        // 保存数据
+        boolean success = this.saveBatch(pointsBoards);
+        return success;
+    }
+
+    /**
+     * 从redis中分页查询上赛季积分榜单数据
+     * */
+    @Override
+    public List<PointsBoard> queryCurrentBoardList(String key, Integer pageNo, Integer pageSize) {
+        int start = (pageNo-1) * pageSize;
+        int end = start + pageSize-1;
+
+        Set<ZSetOperations.TypedTuple<String>> tuples = redisTemplate.opsForZSet().reverseRangeWithScores(key, start, end);
+        if (CollUtil.isEmpty(tuples)){
+            return CollUtils.emptyList();
+        }
+        ArrayList<PointsBoard> pointsBoards = new ArrayList<>();
+
+        Long rank = (long)((pageNo-1) * pageSize);
+        // 2. 封装数据
+        for (ZSetOperations.TypedTuple<String> tuple : tuples){
+            if (tuple != null){
+                String value = tuple.getValue();
+                Double score = tuple.getScore();
+
+                Long userId = Long.valueOf(value);
+                int points = score.intValue();
+
+                PointsBoard board = new PointsBoard();
+                board.setId(++rank);
+                board.setUserId(userId);
+                board.setPoints(points);
+                pointsBoards.add(board);
+            }
+        }
+        return pointsBoards;
     }
 
 

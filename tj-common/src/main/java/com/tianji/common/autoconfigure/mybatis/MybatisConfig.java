@@ -16,10 +16,11 @@ import org.springframework.context.annotation.Configuration;
 @ConditionalOnClass({MybatisPlusInterceptor.class, BaseMapper.class})
 public class MybatisConfig {
 
-    /**
+/**
      * @deprecated 存在任务更新数据导致updater写入0或null的问题，暂时废弃
-     * @see MyBatisAutoFillInterceptor 通过自定义拦截器来实现自动注入creater和updater
-     */
+     * @see com.tianji.common.autoconfigure.mybatis.MyBatisAutoFillInterceptor 通过自定义拦截器来实现自动注入creater和updater*/
+
+
     // @Bean
     // @ConditionalOnMissingBean
     public BaseMetaObjectHandler baseMetaObjectHandler(){
@@ -28,7 +29,7 @@ public class MybatisConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    public MybatisPlusInterceptor mybatisPlusInterceptor(@Autowired(required = false)DynamicTableNameInnerInterceptor innerInterceptor) {
+    public MybatisPlusInterceptor mybatisPlusInterceptor(@Autowired(required = false) DynamicTableNameInnerInterceptor innerInterceptor) {
 
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
 
