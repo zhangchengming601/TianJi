@@ -15,9 +15,11 @@ import com.tianji.promotion.domain.po.CouponScope;
 import com.tianji.promotion.domain.query.CouponQuery;
 import com.tianji.promotion.domain.vo.CouponPageVO;
 import com.tianji.promotion.enums.CouponStatus;
+import com.tianji.promotion.enums.ObtainType;
 import com.tianji.promotion.mapper.CouponMapper;
 import com.tianji.promotion.service.ICouponScopeService;
 import com.tianji.promotion.service.ICouponService;
+import com.tianji.promotion.service.IExchangeCodeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,11 +45,13 @@ import static com.tianji.promotion.enums.CouponStatus.UN_ISSUE;
 public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> implements ICouponService {
 
 
+
+    private final ICouponScopeService scopeService;
+    private final IExchangeCodeService exchangeCodeService;
+
     /**
      * 新增优惠券接口
      * */
-    private final ICouponScopeService scopeService;
-
     @Override
     @Transactional
     public void saveCoupon(CouponFormDTO dto) {
@@ -132,6 +136,13 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         // 4.3.写入数据库
         updateById(c);
 
+        // 如果优惠券的 领取方式是指定发放，且该优惠券之前的状态位待发放，则需要生成兑换码
         // TODO 兑换码生成
+        if (coupon.getObtainWay() == ObtainType.ISSUE && coupon.getStatus() == CouponStatus.DRAFT) {
+            // 设置兑换码兑换的截至时间
+            coupon.setIssueEndTime(c.getIssueEndTime());
+            // 异步生成该优惠券的兑换码
+            exchangeCodeService.asyncGenerateExchangeCode(coupon);
+        }
     }
 }
