@@ -93,7 +93,7 @@ public class CodeUtil {
     /**
      * 生成兑换码
      *
-     * @param serialNum 递增序列号  (也就是自增长id值)
+     * @param serialNum 递增序列号;兑换码的id  (也就是自增长id值)
      *         - fresh：新鲜值，这里建议使用兑换码对应的优惠券id做新鲜值
      * @return 兑换码
      */
@@ -128,7 +128,7 @@ public class CodeUtil {
 
 
     /**
-     * 验证并解析兑换码，返回的是兑换码的序列号，也就是自增id
+     * 验证并解析兑换码，返回的是兑换码的序列号（兑换码的id），也就是自增id
      * */
     public static long parseCode(String code) {
         if (code == null || !code.matches(RegexConstants.COUPON_CODE_PATTERN)) {

@@ -20,4 +20,10 @@ public interface IExchangeCodeService extends IService<ExchangeCode> {
      * */
     void asyncGenerateExchangeCode(Coupon coupon);
 
+
+    /**
+     * 根据兑换码id，校验该兑换码是否已经被兑换过了
+     * */
+    boolean updateExchangeMark(long serialNum, boolean mark);
+
 }

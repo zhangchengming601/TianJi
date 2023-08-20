@@ -64,5 +64,15 @@ public class ExchangeCodeServiceImpl extends ServiceImpl<ExchangeCodeMapper, Exc
     }
 
 
+    /**
+     * 根据兑换码id，校验该兑换码是否已经被兑换过了
+     * */
+    @Override
+    public boolean updateExchangeMark(long serialNum, boolean mark) {
+        Boolean boo = redisTemplate.opsForValue().setBit(COUPON_RANGE_KEY, serialNum, mark);
+        return boo != null && boo;
+    }
+
+
 }
 
