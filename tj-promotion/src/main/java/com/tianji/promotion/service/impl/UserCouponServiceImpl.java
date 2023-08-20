@@ -14,6 +14,8 @@ import com.tianji.promotion.service.IExchangeCodeService;
 import com.tianji.promotion.service.IUserCouponService;
 import com.tianji.promotion.utils.CodeUtil;
 import lombok.RequiredArgsConstructor;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +36,7 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
 
     private final CouponMapper couponMapper;
     private final IExchangeCodeService codeService;
+    private final RedissonClient redissonClient;
 
 
     /**
@@ -57,12 +60,29 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
             throw new BadRequestException("优惠券库存不足");
         }
         Long userId = UserContext.getUser();
-        // 4.校验并生成用户券
-        synchronized (userId.toString().intern()) {
+        // 通过redisson来实现分布式锁
+        String key = "lock:coupon:uid:" + userId;
+        RLock lock = redissonClient.getLock(key);
+
+        try {
+            boolean isLock = lock.tryLock();
+            if (!isLock) {
+                throw  new BizIllegalException("操作太频繁了");
+            }
             // 获得IUserCouponService的代理对象
             IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
             userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
+        } finally {
+            lock.unlock();
         }
+
+
+//        // 4.校验并生成用户券
+//        synchronized (userId.toString().intern()) {
+//            // 获得IUserCouponService的代理对象
+//            IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
+//            userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
+//        }
     }
 
 
