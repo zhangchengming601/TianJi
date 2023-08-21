@@ -13,8 +13,10 @@ import com.tianji.promotion.mapper.UserCouponMapper;
 import com.tianji.promotion.service.IExchangeCodeService;
 import com.tianji.promotion.service.IUserCouponService;
 import com.tianji.promotion.utils.CodeUtil;
+import com.tianji.promotion.utils.MyLock;
+import com.tianji.promotion.utils.MyLockStrategy;
+import com.tianji.promotion.utils.MyLockType;
 import lombok.RequiredArgsConstructor;
-import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
@@ -62,19 +64,19 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
         Long userId = UserContext.getUser();
         // 通过redisson来实现分布式锁
         String key = "lock:coupon:uid:" + userId;
-        RLock lock = redissonClient.getLock(key);
-
-        try {
-            boolean isLock = lock.tryLock();
-            if (!isLock) {
-                throw  new BizIllegalException("操作太频繁了");
-            }
-            // 获得IUserCouponService的代理对象
-            IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
-            userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
-        } finally {
-            lock.unlock();
-        }
+//        RLock lock = redissonClient.getLock(key);
+//
+//        try {
+//            boolean isLock = lock.tryLock();
+//            if (!isLock) {
+//                throw  new BizIllegalException("操作太频繁了");
+//            }
+//            // 获得IUserCouponService的代理对象
+//            IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
+//            userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
+//        } finally {
+//            lock.unlock();
+//        }
 
 
 //        // 4.校验并生成用户券
@@ -83,6 +85,48 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
 //            IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
 //            userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
 //        }
+
+
+        // 获得IUserCouponService的代理对象
+        IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
+        userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
+    }
+
+    /**
+     * 校验并生成用户券，更新兑换码状态
+     * */
+    @Transactional
+    @Override
+    @MyLock(name = "lock:coupon:uid:#{userId}",
+            lockType = MyLockType.RE_ENTRANT_LOCK,
+            lockStrategy = MyLockStrategy.FAIL_AFTER_RETRY_TIMEOUT
+    )
+    public void checkAndCreateUserCoupon(Coupon coupon, Long userId, Integer serialNum){
+        // 1.校验每人限领数量
+        // 1.1.统计当前用户对当前优惠券的已经领取的数量
+        Integer count = lambdaQuery()
+                .eq(UserCoupon::getUserId, userId)
+                .eq(UserCoupon::getCouponId, coupon.getId())
+                .count();
+        // 1.2.校验限领数量
+        if(count != null && count >= coupon.getUserLimit()){
+            throw new BadRequestException("超出领取数量");
+        }
+        // 2.更新优惠券的已经发放的数量 + 1
+        int num = couponMapper.incrIssueNum(coupon.getId());
+        if (num==0) {
+            throw new BizIllegalException("优惠券库存不足");
+        }
+        // 3.新增一个用户券
+        saveUserCoupon(coupon, userId);
+        // 4.更新兑换码状态
+        if (serialNum != null) {
+            codeService.lambdaUpdate()
+                    .set(ExchangeCode::getUserId, userId)
+                    .set(ExchangeCode::getStatus, ExchangeCodeStatus.USED)
+                    .eq(ExchangeCode::getId, serialNum)
+                    .update();
+        }
     }
 
 
@@ -129,38 +173,6 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
 
     }
 
-    /**
-     * 校验并生成用户券，更新兑换码状态
-     * */
-    @Transactional
-    @Override
-    public void checkAndCreateUserCoupon(Coupon coupon, Long userId, Integer serialNum){
-        // 1.校验每人限领数量
-        // 1.1.统计当前用户对当前优惠券的已经领取的数量
-        Integer count = lambdaQuery()
-                .eq(UserCoupon::getUserId, userId)
-                .eq(UserCoupon::getCouponId, coupon.getId())
-                .count();
-        // 1.2.校验限领数量
-        if(count != null && count >= coupon.getUserLimit()){
-            throw new BadRequestException("超出领取数量");
-        }
-        // 2.更新优惠券的已经发放的数量 + 1
-        int num = couponMapper.incrIssueNum(coupon.getId());
-        if (num==0) {
-            throw new BizIllegalException("优惠券库存不足");
-        }
-        // 3.新增一个用户券
-        saveUserCoupon(coupon, userId);
-        // 4.更新兑换码状态
-        if (serialNum != null) {
-            codeService.lambdaUpdate()
-                    .set(ExchangeCode::getUserId, userId)
-                    .set(ExchangeCode::getStatus, ExchangeCodeStatus.USED)
-                    .eq(ExchangeCode::getId, serialNum)
-                    .update();
-        }
-    }
 
     private void saveUserCoupon(Coupon coupon, Long userId) {
         // 1.基本信息
