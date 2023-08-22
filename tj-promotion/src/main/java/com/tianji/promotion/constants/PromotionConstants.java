@@ -11,7 +11,17 @@ public interface PromotionConstants {
      * 校验兑换码是否兑换，  借助redis的bitmap数据结构
      * */
     String COUPON_CODE_MAP_KEY = "coupon:code:map";
+
+    /**
+     * 优惠券缓存前缀  "prs:coupon: + 优惠券id"
+     * hash结构
+     * */
     String COUPON_CACHE_KEY_PREFIX = "prs:coupon:";
+
+    /**
+     * 用户优惠券 缓存前缀 prs:user:coupon:+优惠券id
+     * hash结构
+     * */
     String USER_COUPON_CACHE_KEY_PREFIX = "prs:user:coupon:";
     String COUPON_RANGE_KEY = "coupon:code:range";
 

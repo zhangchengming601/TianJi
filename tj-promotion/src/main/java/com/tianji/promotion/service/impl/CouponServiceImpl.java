@@ -7,8 +7,10 @@ import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.exceptions.BizIllegalException;
 import com.tianji.common.utils.BeanUtils;
 import com.tianji.common.utils.CollUtils;
+import com.tianji.common.utils.DateUtils;
 import com.tianji.common.utils.StringUtils;
 import com.tianji.common.utils.UserContext;
+import com.tianji.promotion.constants.PromotionConstants;
 import com.tianji.promotion.domain.dto.CouponFormDTO;
 import com.tianji.promotion.domain.dto.CouponIssueFormDTO;
 import com.tianji.promotion.domain.po.Coupon;
@@ -26,11 +28,13 @@ import com.tianji.promotion.service.ICouponService;
 import com.tianji.promotion.service.IExchangeCodeService;
 import com.tianji.promotion.service.IUserCouponService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -56,6 +60,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     private final ICouponScopeService scopeService;
     private final IExchangeCodeService exchangeCodeService;
     private final IUserCouponService userCouponService;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * 新增优惠券接口
@@ -144,6 +149,13 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         // 4.3.写入数据库
         updateById(c);
 
+        // 5. 如果优惠券是立刻发放，则将该优惠券信息，存入redis中 （优惠券id，领卷的开始时间，结束时间，发行的数量） hash结构
+        if (isBegin) {
+            coupon.setIssueBeginTime(c.getIssueBeginTime());
+            coupon.setIssueEndTime(c.getIssueEndTime());
+            cacheCouponInfo(coupon);
+        }
+
         // 如果优惠券的 领取方式是指定发放，且该优惠券之前的状态位待发放，则需要生成兑换码
         // TODO 兑换码生成
         if (coupon.getObtainWay() == ObtainType.ISSUE && coupon.getStatus() == CouponStatus.DRAFT) {
@@ -152,6 +164,20 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
             // 异步生成该优惠券的兑换码
             exchangeCodeService.asyncGenerateExchangeCode(coupon);
         }
+    }
+
+    /**
+     * 将优惠券信息 保存到redis中
+     * */
+    private void cacheCouponInfo(Coupon coupon) {
+        // 1.组织数据
+        Map<String, String> map = new HashMap<>(4);
+        map.put("issueBeginTime", String.valueOf(DateUtils.toEpochMilli(coupon.getIssueBeginTime())));
+        map.put("issueEndTime", String.valueOf(DateUtils.toEpochMilli(coupon.getIssueEndTime())));
+        map.put("totalNum", String.valueOf(coupon.getTotalNum()));
+        map.put("userLimit", String.valueOf(coupon.getUserLimit()));
+        // 2.写缓存
+        redisTemplate.opsForHash().putAll(PromotionConstants.COUPON_CACHE_KEY_PREFIX + coupon.getId(), map);
     }
 
 
@@ -197,5 +223,40 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
             vo.setReceived(unusedMap.getOrDefault(c.getId(),  0L) > 0);
         }
         return list;
+    }
+
+
+    /**
+     * 暂停发放优惠券
+     * */
+    @Override
+    @Transactional
+    public void pauseIssue(Long id) {
+        // 1.查询旧优惠券
+        Coupon coupon = getById(id);
+        if (coupon == null) {
+            throw new BadRequestException("优惠券不存在");
+        }
+
+        // 2.当前券状态必须是未开始或进行中
+        CouponStatus status = coupon.getStatus();
+        if (status != UN_ISSUE && status != ISSUING) {
+            // 状态错误，直接结束
+            return;
+        }
+
+        // 3.更新状态
+        boolean success = lambdaUpdate()
+                .set(Coupon::getStatus, PAUSE)
+                .eq(Coupon::getId, id)
+                .in(Coupon::getStatus, UN_ISSUE, ISSUING)
+                .update();
+        if (!success) {
+            // 可能是重复更新，结束
+            log.error("重复暂停优惠券");
+        }
+
+        // 4.删除缓存
+        redisTemplate.delete(PromotionConstants.COUPON_CACHE_KEY_PREFIX + id);
     }
 }

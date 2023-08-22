@@ -41,4 +41,10 @@ public interface ICouponService extends IService<Coupon> {
      * 查询发放中的优惠券
      * */
     List<CouponVO> queryIssuingCoupons();
+
+
+    /**
+     * 暂停发放优惠券
+     * */
+    void pauseIssue(Long id);
 }
