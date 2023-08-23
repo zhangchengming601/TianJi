@@ -1,8 +1,8 @@
 package com.tianji.promotion.service;
 
-import com.tianji.promotion.domain.po.Coupon;
-import com.tianji.promotion.domain.po.UserCoupon;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.tianji.promotion.domain.dto.UserCouponDTO;
+import com.tianji.promotion.domain.po.UserCoupon;
 
 /**
  * <p>
@@ -31,5 +31,5 @@ public interface IUserCouponService extends IService<UserCoupon> {
     /**
      * 校验并生成用户券，更新兑换码状态
      * */
-    void checkAndCreateUserCoupon(Coupon coupon, Long userId, Integer serialNum);
+    void checkAndCreateUserCoupon(UserCouponDTO uc);
 }

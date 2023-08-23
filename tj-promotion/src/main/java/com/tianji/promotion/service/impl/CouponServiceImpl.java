@@ -157,7 +157,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         }
 
         // 如果优惠券的 领取方式是指定发放，且该优惠券之前的状态位待发放，则需要生成兑换码
-        // TODO 兑换码生成
+        //  兑换码生成
         if (coupon.getObtainWay() == ObtainType.ISSUE && coupon.getStatus() == CouponStatus.DRAFT) {
             // 设置兑换码兑换的截至时间
             coupon.setIssueEndTime(c.getIssueEndTime());

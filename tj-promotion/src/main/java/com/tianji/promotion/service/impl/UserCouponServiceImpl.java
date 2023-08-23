@@ -1,9 +1,13 @@
 package com.tianji.promotion.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.exceptions.BizIllegalException;
 import com.tianji.common.utils.UserContext;
+import com.tianji.promotion.domain.dto.UserCouponDTO;
 import com.tianji.promotion.domain.po.Coupon;
 import com.tianji.promotion.domain.po.ExchangeCode;
 import com.tianji.promotion.domain.po.UserCoupon;
@@ -18,11 +22,17 @@ import com.tianji.promotion.utils.MyLockStrategy;
 import com.tianji.promotion.utils.MyLockType;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RedissonClient;
-import org.springframework.aop.framework.AopContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Map;
+
+import static com.tianji.common.constants.MqConstants.Exchange.PROMOTION_EXCHANGE;
+import static com.tianji.common.constants.MqConstants.Key.COUPON_RECEIVE;
+import static com.tianji.promotion.constants.PromotionConstants.COUPON_CACHE_KEY_PREFIX;
+import static com.tianji.promotion.constants.PromotionConstants.USER_COUPON_CACHE_KEY_PREFIX;
 
 /**
  * <p>
@@ -39,6 +49,8 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
     private final CouponMapper couponMapper;
     private final IExchangeCodeService codeService;
     private final RedissonClient redissonClient;
+    private final StringRedisTemplate redisTemplate;
+    private final RabbitMqHelper mqHelper;
 
 
     /**
@@ -46,9 +58,12 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
      * */
     @Override
     @Transactional
+    @MyLock(name = "lock:coupon:uid:#{id}")
     public void receiveCoupon(Long couponId) {
         // 1.查询优惠券
-        Coupon coupon = couponMapper.selectById(couponId);
+        // Coupon coupon = couponMapper.selectById(couponId);
+        Coupon coupon = queryCouponByRedisCache(couponId);
+
         if (coupon == null) {
             throw new BadRequestException("优惠券不存在");
         }
@@ -58,9 +73,11 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
             throw new BadRequestException("优惠券发放已经结束或尚未开始");
         }
         // 3.校验库存
-        if (coupon.getIssueNum() >= coupon.getTotalNum()) {
+        if (coupon.getTotalNum()<=0) {
             throw new BadRequestException("优惠券库存不足");
         }
+
+
         Long userId = UserContext.getUser();
         // 通过redisson来实现分布式锁
         String key = "lock:coupon:uid:" + userId;
@@ -87,14 +104,45 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
 //        }
 
 
-        // 获得IUserCouponService的代理对象
+/*        // 获得IUserCouponService的代理对象
         IUserCouponService userCouponServiceProxy = (IUserCouponService) AopContext.currentProxy();
-        userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);
+        userCouponServiceProxy.checkAndCreateUserCoupon(coupon, userId, null);*/
+
+        // 统计已领数量
+        String userCouponKey = USER_COUPON_CACHE_KEY_PREFIX + couponId;
+        Long increment = redisTemplate.opsForHash().increment(userCouponKey, userId, 1);
+        if (increment>coupon.getUserLimit()) {
+            throw new BizIllegalException("当前用户超出限领数量");
+        }
+
+        // 在redis中修改优惠券库存  -1
+        redisTemplate.opsForHash().increment(COUPON_CACHE_KEY_PREFIX+couponId,"totalNum",-1);
+
+        // 发送消息到mq，消息内容是 userId,couponId
+        UserCouponDTO msg = new UserCouponDTO();
+        msg.setCouponId(couponId);
+        msg.setUserId(userId);
+        mqHelper.send(PROMOTION_EXCHANGE,COUPON_RECEIVE,msg);
     }
 
     /**
-     * 校验并生成用户券，更新兑换码状态
+     * 从redis中获取优惠券信息
      * */
+    private Coupon queryCouponByRedisCache(Long couponId){
+        // 1. key
+        String key = COUPON_CACHE_KEY_PREFIX + couponId;
+        // 2. 从redis中查询数据
+        Map<Object, Object> entries = redisTemplate.opsForHash().entries(key);
+        // 3. 将map类型转为Bean类型
+        Coupon coupon = BeanUtil.mapToBean(entries, Coupon.class, false, CopyOptions.create());
+        return coupon;
+    }
+
+
+/*
+    *//**
+     * 校验并生成用户券，更新兑换码状态
+     * *//*
     @Transactional
     @Override
     @MyLock(name = "lock:coupon:uid:#{userId}",
@@ -127,6 +175,68 @@ public class UserCouponServiceImpl extends ServiceImpl<UserCouponMapper, UserCou
                     .eq(ExchangeCode::getId, serialNum)
                     .update();
         }
+    }*/
+
+    @Transactional
+    @MyLock(name = "lock:coupon:uid:#{userId}",
+            lockType = MyLockType.RE_ENTRANT_LOCK,
+            lockStrategy = MyLockStrategy.FAIL_AFTER_RETRY_TIMEOUT
+    )
+    public void checkAndCreateUserCoupon(Coupon coupon, Long userId, Integer serialNum){
+        // 1.校验每人限领数量
+        // 1.1.统计当前用户对当前优惠券的已经领取的数量
+        Integer count = lambdaQuery()
+                .eq(UserCoupon::getUserId, userId)
+                .eq(UserCoupon::getCouponId, coupon.getId())
+                .count();
+        // 1.2.校验限领数量
+        if(count != null && count >= coupon.getUserLimit()){
+            throw new BadRequestException("超出领取数量");
+        }
+        // 2.更新优惠券的已经发放的数量 + 1
+        int num = couponMapper.incrIssueNum(coupon.getId());
+        if (num==0) {
+            throw new BizIllegalException("优惠券库存不足");
+        }
+        // 3.新增一个用户券
+        saveUserCoupon(coupon, userId);
+        // 4.更新兑换码状态
+        if (serialNum != null) {
+            codeService.lambdaUpdate()
+                    .set(ExchangeCode::getUserId, userId)
+                    .set(ExchangeCode::getStatus, ExchangeCodeStatus.USED)
+                    .eq(ExchangeCode::getId, serialNum)
+                    .update();
+        }
+    }
+
+
+    /**
+     * 校验并生成用户券，更新兑换码状态
+     * */
+    @Transactional
+    @Override
+    public void checkAndCreateUserCoupon(UserCouponDTO uc) {
+        // 1.查询优惠券
+        Coupon coupon = couponMapper.selectById(uc.getCouponId());
+        if (coupon == null) {
+            return;
+        }
+        // 2.更新优惠券的已经发放的数量 + 1
+        int r = couponMapper.incrIssueNum(coupon.getId());
+        if (r == 0) {
+            return;
+        }
+        // 3.新增一个用户券
+        saveUserCoupon(coupon, uc.getUserId());
+       /* // 4.更新兑换码状态
+        if (serialNum != null) {
+            codeService.lambdaUpdate()
+                    .set(ExchangeCode::getUserId, uc.getUserId())
+                    .set(ExchangeCode::getStatus, ExchangeCodeStatus.USED)
+                    .eq(ExchangeCode::getId, uc.getSerialNum())
+                    .update();
+        }*/
     }
 
 
