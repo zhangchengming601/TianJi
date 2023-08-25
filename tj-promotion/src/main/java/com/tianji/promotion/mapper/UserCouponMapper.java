@@ -1,7 +1,11 @@
 package com.tianji.promotion.mapper;
 
+import com.tianji.promotion.domain.po.Coupon;
 import com.tianji.promotion.domain.po.UserCoupon;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * <p>
@@ -12,5 +16,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  * @since 2023-08-17
  */
 public interface UserCouponMapper extends BaseMapper<UserCoupon> {
+
+    // 我们用Coupon中的creater字段（Long）来存储UserCoupon的id字段; UserCoupon的id字段是为了在使用了该优惠券之后，在UserCoupon表中将该条数据改为已使用
+    List<Coupon> queryMyCoupons(@Param("userId") Long userId);
 
 }
