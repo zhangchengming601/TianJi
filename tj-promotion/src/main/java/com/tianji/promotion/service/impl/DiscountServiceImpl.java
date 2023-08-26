@@ -96,6 +96,7 @@ public class DiscountServiceImpl implements IDiscountService {
         for (List<Coupon> solution : solutions) {
             // 4.2 异步计算
             CompletableFuture<CouponDiscountDTO> future = CompletableFuture.supplyAsync(() -> calculateSolutionDiscount(availableCouponMap, orderCourses, solution), discountSolutionExecutor);
+            // 当任务完成之后，会触发future.thenAccept这个方法
             future.thenAccept(couponDiscountDTO -> {
                 // 4.3 将任务结果
                 list.add(couponDiscountDTO);
@@ -104,6 +105,7 @@ public class DiscountServiceImpl implements IDiscountService {
         }
         // 4.4.等待运算结束
         try {
+            // 主线程等待，默认超时时间1s
             latch.await(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             log.error("优惠方案计算被中断，{}", e.getMessage());
@@ -156,7 +158,11 @@ public class DiscountServiceImpl implements IDiscountService {
 
 
     /**
-     * 计算单个solution的CouponDiscountDTO信息
+     * 计算单个方案的优惠详情
+     * 参数：
+     *  Map<Coupon, List<OrderCourseDTO>> couponMap : 优惠券和该优惠券可用课程的映射
+     *  List<OrderCourseDTO> courses : 订单中的所有课程
+     *  List<Coupon> solution : 当前方案的优惠券集合
      * */
     private CouponDiscountDTO calculateSolutionDiscount(Map<Coupon, List<OrderCourseDTO>> couponMap,
                                                         List<OrderCourseDTO> courses,
@@ -170,7 +176,7 @@ public class DiscountServiceImpl implements IDiscountService {
         for (Coupon coupon : solution) {
             // 3.1.获取优惠券限定范围对应的课程
             List<OrderCourseDTO> availableCourses  = couponMap.get(coupon);
-            // 3.2.计算该优惠券对应的课程s的课程总价(课程原价 - 折扣明细)
+            // 3.2.计算该优惠券对应的课程的课程总价(课程原价 - 折扣明细)
             int totalAmount  = availableCourses.stream()
                     .mapToInt(oc -> (oc.getPrice() - detailMap.get(oc.getId())))
                     .sum();
@@ -197,9 +203,16 @@ public class DiscountServiceImpl implements IDiscountService {
 
     /**
      * 计算优惠明细
+     * 参数：
+     *      Map<Long, Integer> detailMap : 优惠明细  key：课程id   value：该课程已优惠了多少钱
+     *      List<OrderCourseDTO> courses : 满足该优惠券使用的课程的集合
+     *      int totalAmount : 此时当前优惠券可用的课程的总价格（已减去之前券优惠后的）
+     *      int discountAmount : 优惠的金额
      * */
-    private void calculateDiscountDetails(Map<Long, Integer> detailMap, List<OrderCourseDTO> courses,
-                                          int totalAmount, int discountAmount) {
+    private void calculateDiscountDetails(Map<Long, Integer> detailMap,
+                                          List<OrderCourseDTO> courses,
+                                          int totalAmount,
+                                          int discountAmount) {
         int times = 0;
         int remainDiscount = discountAmount;
         for (OrderCourseDTO course : courses) {
